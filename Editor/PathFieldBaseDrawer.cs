@@ -261,43 +261,63 @@ namespace InspectorPathField.Editor
         }
 
 
-        private void SearchButtonUnitySearch(int buttonIndex, SerializedProperty assetPath,
-                                             ref Rect position, SerializedProperty original)
-        {
-            Rect searchButtonRect = new(position.x + ButtonShift(buttonIndex),
-                                        position.y, BUTTON_WIDTH,
-                                        position.height);
+    private void SearchButtonUnitySearch(int buttonIndex, SerializedProperty assetPath,
+                                        ref Rect position, SerializedProperty original)
+    {
+        Rect searchButtonRect = new(position.x + ButtonShift(buttonIndex),
+                                    position.y, BUTTON_WIDTH,
+                                    position.height);
 
-            if (!GUI.Button(searchButtonRect, _resources.SearchButtonTexture, _buttonStyle))
-            {
-                return;
-            }
-
-            SearchContext context = SearchService.CreateContext("asset",
-                                                                _settings.SearchQuery);
-
-            SearchViewState state = SearchViewState.CreatePickerState($"Select: {original.displayName}",
-                                                                      context,
-                                                                      ProceedSelection,
-                                                                      flags: _settings.SearchViewFlags);
-
-            SearchService.ShowPicker(state);
-
+        if (!GUI.Button(searchButtonRect, _resources.SearchButtonTexture, _buttonStyle))
             return;
 
-            void ProceedSelection(SearchItem obj, bool i)
+        var targetObject = original.serializedObject.targetObject;
+        var field = targetObject.GetType()
+            .GetField(original.name, System.Reflection.BindingFlags.Public | 
+                                    System.Reflection.BindingFlags.NonPublic | 
+                                    System.Reflection.BindingFlags.Instance);
+
+        Type defaultType = null;
+        if (field != null)
+        {
+            var attr = field.GetCustomAttributes(typeof(PathFieldAttribute), true)
+                            .FirstOrDefault() as PathFieldAttribute;
+            if (attr != null)
             {
-                if (GlobalObjectId.TryParse(obj.value as string, out GlobalObjectId id))
-                {
-                    assetPath.stringValue = AssetDatabase.GUIDToAssetPath(id.assetGUID);
-                    assetPath.serializedObject.ApplyModifiedProperties();
-                }
-                else
-                {
-                    throw new Exception($"Object {obj} cannot be found or loaded");
-                }
+                defaultType = attr.DefaultSerchType;
             }
         }
+
+        string searchQuery = _settings.SearchQuery;
+        if (defaultType != null)
+        {
+            searchQuery += $" t:{defaultType.Name}";
+        }
+
+        SearchContext context = SearchService.CreateContext("asset", searchQuery);
+
+        SearchViewState state = SearchViewState.CreatePickerState(
+            $"Select: {original.displayName}",
+            context,
+            ProceedSelection,
+            flags: _settings.SearchViewFlags
+        );
+
+        SearchService.ShowPicker(state);
+
+        void ProceedSelection(SearchItem obj, bool i)
+        {
+            if (GlobalObjectId.TryParse(obj.value as string, out GlobalObjectId id))
+            {
+                assetPath.stringValue = AssetDatabase.GUIDToAssetPath(id.assetGUID);
+                assetPath.serializedObject.ApplyModifiedProperties();
+            }
+            else
+            {
+                throw new Exception($"Object {obj} cannot be found or loaded");
+            }
+        }
+    }
 
 
         private float ButtonShift(int buttonIndex)
